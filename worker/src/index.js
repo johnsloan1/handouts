@@ -7,22 +7,27 @@
  * shows up in Cloudflare's request logs. Only Google Calendar iCal links are
  * fetched, and nothing is stored.
  *
- * Any web page may call it: it holds no secrets and only passes back the
- * calendar whose secret link the caller already has.
+ * Only the handouts page may use it: handouts.foxtrotphoto.com, over http or
+ * https. Other sites get no answer their browser will accept.
  */
+const SITE = 'handouts.foxtrotphoto.com';
+
+function allowedOrigin(origin) {
+  try { return new URL(origin).hostname === SITE; } catch (e) { return false; }
+}
 const ICS_PATH = /^\/calendar\/ical\/[^/]+\/(private-[0-9a-f]+|public)\/basic\.ics$/;
 
 export default {
   async fetch(request) {
-    const cors = {
-      'Access-Control-Allow-Origin': '*',
-      'Cache-Control': 'no-store',
-      'Referrer-Policy': 'no-referrer'
-    };
+    const origin = request.headers.get('Origin') || '';
+    const ok = allowedOrigin(origin);
+    const cors = { 'Vary': 'Origin', 'Cache-Control': 'no-store', 'Referrer-Policy': 'no-referrer' };
+    if (ok) cors['Access-Control-Allow-Origin'] = origin;
     if (request.method === 'OPTIONS') {
       return new Response(null, { headers: { ...cors, 'Access-Control-Allow-Methods': 'POST', 'Access-Control-Max-Age': '86400' } });
     }
     if (request.method !== 'POST') return new Response('Foxtrot Handouts calendar relay.', { headers: cors });
+    if (!ok) return new Response('This relay only works for ' + SITE + '.', { status: 403, headers: cors });
 
     let target;
     try {
