@@ -4,6 +4,9 @@ var HB_CONFIG = {
   relayUrl: 'https://handouts.sloanphoto.workers.dev',
   timeZone: 'America/Chicago',
   weeks: 4,
-  sallyEmail: 'office@sloanphotography.com',
-  emailSubject: 'Handouts'
+  emailSubject: 'Handouts',
+  // Default coach email; each device can change it in Settings.
+  // Placeholders: [school] [sport] [day] [date] [short date] [time] [coach]
+  coachSubject: 'Picture day – [school] [sport] ([short date])',
+  coachBody: 'Hi [coach],\n\nAttached is the picture-day handout for [day] [date].\n\nThank you!\nJohn Sloan\nFoxtrot Photography'
 };

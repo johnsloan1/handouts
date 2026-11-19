@@ -5,7 +5,7 @@ Makes the picture-day handouts for John's school sports jobs, at
 Calendar, finds the school jobs in the next four weeks, and makes **Paper**
 handouts (full sheet + half sheet, with prices) or **Online** handouts (school
 colors and logo, no prices) as 300 dpi JPEGs. From the job list you can
-**Download**, **Print**, or **Email Sally**.
+**Download**, **Print**, or **Email** them.
 
 It's a plain web page, like Pinpoint: pushing to `main` publishes it. Nothing
 in it is secret, and it never holds a Google login.
@@ -18,10 +18,16 @@ in it is secret, and it never holds a Google login.
   calendar feeds directly, so the page asks a tiny relay to fetch it
   (`worker/`, a Cloudflare Worker). The relay only fetches Google Calendar
   iCal links and stores nothing.
-- **Email:** *Email Sally* and *Email coach* open your own email app with the
-  address and subject filled in (Sally's subject: **Handouts**). On iPhone,
-  iPad and Mac Safari, **Share to Mail** attaches the handouts for you;
-  otherwise they download and you attach them.
+- **Email:** buttons open your own email app; the page never sends anything.
+  - **Email** (bottom bar) starts an email with every selected handout, the
+    subject **Handouts** and a list of the jobs. The To line is blank.
+  - **Email coach** (in Preview / Edit) sends that job's handout as shown,
+    addressed to the `Contact: … · email` from the calendar when there is one.
+    Its subject and message are set in **Settings → Coach email**, with
+    placeholders `[school]` `[sport]` `[day]` `[date]` `[short date]` `[time]`
+    `[coach]` (`[coach]` is the first name, or "Coach").
+  - On iPhone, iPad and Mac Safari, **Share to Mail** attaches the handouts;
+    otherwise they download and you attach them.
 - **Schools:** shared settings for everyone live in `data/schools.json`, with
   logos in `logos/`. Changes made on the Schools tab are saved on that device
   only. To share a logo or colors with everyone, add them to
@@ -43,8 +49,8 @@ in it is secret, and it never holds a Google login.
   its entry. On one device, use **Not a school — remove** on the Schools tab.
 - **Preview / Edit** has a **Download** button that saves that job's handout as
   it looks on screen, edits included, even before you save them.
-- **Edits** to one job, the Paper/Online choice, Sally's address and the
-  half-sheet setting are saved on the device where they're made.
+- **Edits** to one job, the Paper/Online choice, the coach email wording and
+  the half-sheet setting are saved on the device where they're made.
 - **Saved on a device** means in that browser. On iPhone, add the page to the
   Home Screen (Share → Add to Home Screen) so it stays saved.
 
@@ -92,7 +98,7 @@ The text uses Arimo, a free font with Helvetica's letter widths.
 | File | What it does |
 | --- | --- |
 | `index.html`, `css/app.css`, `js/app.js` | The page |
-| `js/config.js` | Relay address, Sally's email, weeks shown |
+| `js/config.js` | Relay address, default coach email, weeks shown |
 | `js/ics.js` | Reads the calendar feed |
 | `js/parse.js` | Turns calendar events into jobs |
 | `js/render.js` | Draws the handouts |

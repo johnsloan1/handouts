@@ -352,13 +352,13 @@
     var shareFiles = m.files.map(function (f) { return new File([f.blob], f.name, { type: f.blob.type || 'image/jpeg' }); });
     var canShare = false;
     try { canShare = !!(navigator.canShare && navigator.canShare({ files: shareFiles })); } catch (e) { canShare = false; }
-    var mailto = 'mailto:' + encodeURIComponent(m.to).replace(/%40/g, '@') + '?subject=' + encodeURIComponent(m.subject) + '&body=' + encodeURIComponent(m.body);
+    var mailto = 'mailto:' + encodeURIComponent(m.to || '').replace(/%40/g, '@') + '?subject=' + encodeURIComponent(m.subject) + '&body=' + encodeURIComponent(m.body);
     var saved = false;
     var saveOnce = function () { if (!saved) { saved = true; saveFiles(m.jobs, m.files).catch(fail); } };
     var n = m.files.length;
     var body = h('div', { class: 'sheet-body one' }, h('div', { class: 'fields' },
       h('div', { class: 'details' },
-        h('div', {}, h('b', { text: 'To: ' }), m.toLabel || m.to),
+        h('div', {}, h('b', { text: 'To: ' }), m.toLabel || m.to || 'blank (type it in your email app)'),
         h('div', {}, h('b', { text: 'Subject: ' }), m.subject),
         h('div', {}, h('b', { text: 'Attach: ' }), n + ' file' + (n > 1 ? 's' : ''))),
       canShare ? h('button', {
@@ -368,36 +368,65 @@
           });
         }
       }, icon('share'), 'Share to Mail (files attached)') : null,
-      canShare ? h('div', { class: 'hint', text: 'Pick Mail, then type ' + (m.toLabel || m.to) + ' in the To line.' }) : null,
+      canShare ? h('div', { class: 'hint', text: m.to ? 'Pick Mail, then type ' + m.to + ' in the To line.' : 'Pick Mail, then type who it\'s for in the To line.' }) : null,
       h('a', {
         class: 'btn' + (canShare ? '' : ' primary'), href: mailto, style: 'text-decoration:none;justify-content:center',
         onclick: function () { saveOnce(); rememberModes(m.jobs); }
       }, icon('mail'), 'Open email app'),
-      h('div', { class: 'hint', text: 'Starts the email with the address and subject filled in, and downloads the ' +
+      h('div', { class: 'hint', text: 'Starts the email with ' + (m.to ? 'the address and ' : '') + 'the subject filled in, and downloads the ' +
         (n > 1 ? 'files as a .zip' : 'file') + '. Attach ' + (n > 1 ? 'them' : 'it') + ' from your Downloads folder.' })));
     openSheet(m.title, body, h('div', { class: 'sheet-foot' }, h('button', { class: 'btn', text: 'Done', onclick: closeSheet })));
   }
 
-  function doEmailSally() {
+  function doEmail() {
     var jobs = selectedJobs();
     if (!jobs.length) return;
     makeFiles(jobs, progress('Making file')).then(function (files) {
       busy();
       openMailSheet({
-        title: 'Email to Sally', to: setting('sallyEmail'), subject: CFG.emailSubject, files: files, jobs: jobs,
-        body: 'Hi Sally,\n\nHere ' + (jobs.length === 1 ? 'is the handout' : 'are the handouts') + ':\n\n' + jobs.map(jobLine).join('\n') + '\n'
+        title: 'Email', to: '', subject: CFG.emailSubject, files: files, jobs: jobs,
+        body: 'Here ' + (jobs.length === 1 ? 'is the picture-day handout' : 'are the picture-day handouts') + ':\n\n' + jobs.map(jobLine).join('\n') + '\n'
       });
     }).catch(fail);
   }
 
-  function doEmailCoach(job) {
-    makeFiles([job], progress('Making file')).then(function (files) {
+  /** "8:00 AM", "8:00 AM and 12:30 PM", "8:00 AM, 10:00 AM and 11:00 AM" */
+  function timesText(job) {
+    var t = [];
+    job.sessions.forEach(function (s) { var f = fmtTime(s.start); if (f && t.indexOf(f) < 0) t.push(f); });
+    if (t.length < 2) return t[0] || '';
+    return t.slice(0, -1).join(', ') + ' and ' + t[t.length - 1];
+  }
+
+  /** Fills [school] [sport] [day] [date] [short date] [time] [coach] for one job. */
+  function fillTemplate(text, job) {
+    var p = parts(job.date);
+    var first = String(job.coachName || '').trim().split(/\s+/)[0];
+    var values = {
+      'school': profileOf(job).name,
+      'sport': job.sportLabel || '',
+      'day': WEEKDAYS[p.dow],
+      'date': MONTHS[p.m - 1] + ' ' + p.d,
+      'short date': p.m + '/' + p.d,
+      'time': timesText(job),
+      'coach': first || 'Coach'
+    };
+    return String(text || '').replace(/\[\s*(school|sport|day|date|short date|time|coach)\s*\]/gi, function (m, k) {
+      return values[k.toLowerCase().replace(/\s+/g, ' ')];
+    }).replace(/[ \t]{2,}/g, ' ').replace(/ \)/g, ')').replace(/\( /g, '(');
+  }
+
+  /** Email coach from Preview / Edit: the handout as shown (draft), coach address if known. */
+  function doEmailCoach(job, draft) {
+    var drafts = {};
+    if (draft) drafts[job.id] = draft;
+    makeFiles([job], progress('Making file'), drafts).then(function (files) {
       busy();
       openMailSheet({
-        title: 'Email to coach', to: job.coachEmail, toLabel: (job.coachName ? job.coachName + ' ' : '') + '<' + job.coachEmail + '>',
-        subject: 'Picture day – ' + label(job) + ' (' + md(job.date) + ')', files: files, jobs: [job],
-        body: 'Hi' + (job.coachName ? ' ' + job.coachName.split(' ')[0] : '') + ',\n\nAttached is the picture-day handout for ' +
-          HB_longDate(job.date) + '.\n\nThank you!\nJohn Sloan\nFoxtrot Photography\n'
+        title: 'Email coach', to: job.coachEmail || '',
+        toLabel: job.coachEmail ? (job.coachName ? job.coachName + ' ' : '') + '<' + job.coachEmail + '>' : '',
+        subject: fillTemplate(setting('coachSubject'), job).trim(), files: files, jobs: [job],
+        body: fillTemplate(setting('coachBody'), job)
       });
     }).catch(fail);
   }
@@ -600,7 +629,7 @@
         h('span', { class: 'n', text: n + ' selected' }),
         h('button', { class: 'btn', onclick: doDownload }, icon('download'), 'Download'),
         h('button', { class: 'btn', onclick: doPrint }, icon('print'), 'Print'),
-        h('button', { class: 'btn primary', onclick: doEmailSally }, icon('mail'), 'Email Sally')));
+        h('button', { class: 'btn primary', onclick: doEmail }, icon('mail'), 'Email')));
   }
 
   // ---------------------------------------------------------------- sheets
@@ -777,7 +806,7 @@
           }).catch(fail);
         }
       }, icon('download'), 'Download'),
-      job.coachEmail ? h('button', { class: 'btn', onclick: function () { doEmailCoach(job); } }, icon('mail'), 'Email coach') : null,
+      h('button', { class: 'btn', onclick: function () { doEmailCoach(job, draft); } }, icon('mail'), 'Email coach'),
       h('button', { class: 'btn', text: 'Cancel', onclick: closeSheet }),
       h('button', { class: 'btn primary', text: 'Save', onclick: save }));
     openSheet(label(job) + ' · ' + dayShort(job.date) + ' ' + md(job.date), h('div', { class: 'sheet-body' }, prevBox, fields), foot);
@@ -936,7 +965,7 @@
   // ---------------------------------------------------------------- settings
 
   function renderSettings(main) {
-    var s = { sallyEmail: setting('sallyEmail'), rotateHalfRight: !!setting('rotateHalfRight'), weeks: setting('weeks') };
+    var s = { coachSubject: setting('coachSubject'), coachBody: setting('coachBody'), rotateHalfRight: !!setting('rotateHalfRight'), weeks: setting('weeks') };
     main.appendChild(h('div', { class: 'panel' }, h('h2', { text: 'Calendar' }),
       h('div', { class: 'fields' },
         h('div', { class: 'hint', text: calendarLink() ? 'A calendar link is saved on this device.' : 'No calendar link on this device yet.' }),
@@ -950,19 +979,49 @@
           }) : null))));
     main.appendChild(h('div', { class: 'panel' }, h('h2', { text: 'Handouts and email' }),
       h('div', { class: 'fields' },
-        field('"Email Sally" goes to', h('input', { type: 'email', value: s.sallyEmail, oninput: function (ev) { s.sallyEmail = ev.target.value.trim(); } })),
         h('label', { class: 'check' }, h('input', { type: 'checkbox', checked: s.rotateHalfRight, onchange: function (ev) { s.rotateHalfRight = ev.target.checked; } }), 'Half sheets: turn the right-hand copy upside down'),
         field('Weeks to show', h('input', { type: 'text', inputmode: 'numeric', value: String(s.weeks), oninput: function (ev) { s.weeks = ev.target.value; } })),
         h('div', { class: 'hint', text: 'These are saved on this device.' }),
         h('div', {}, h('button', {
           class: 'btn primary', text: 'Save', onclick: function () {
-            if (!/^[^\s@]+@[^\s@]+\.[a-z]{2,}$/i.test(s.sallyEmail)) return toast('Check the email address.', true);
-            L.settings.sallyEmail = s.sallyEmail;
             L.settings.rotateHalfRight = s.rotateHalfRight;
             L.settings.weeks = Math.max(1, Math.min(8, Number(s.weeks) || CFG.weeks));
             saveLocal(); toast('Saved'); S.view = 'jobs'; loadJobs();
           }
         })))));
+
+    // Coach email wording, with placeholders.
+    var sample = (S.jobs || [])[0];
+    var example = h('div', { class: 'details', style: 'white-space:pre-wrap' });
+    var showExample = function () {
+      if (!sample) { example.textContent = 'An example appears here when there are jobs on the calendar.'; return; }
+      example.textContent = 'Example (' + profileOf(sample).name + '):\n\nSubject: ' + fillTemplate(subjectInput.value, sample).trim() + '\n\n' + fillTemplate(bodyInput.value, sample);
+    };
+    var subjectInput = h('input', { type: 'text', value: s.coachSubject, oninput: showExample });
+    var bodyInput = h('textarea', { rows: '8', oninput: showExample });
+    bodyInput.value = s.coachBody;
+    main.appendChild(h('div', { class: 'panel' }, h('h2', { text: 'Coach email' }),
+      h('div', { class: 'fields' },
+        h('div', { class: 'hint', text: 'Used by Email coach. These fill in by themselves: [school] [sport] [day] [date] [short date] [time] [coach]. [coach] is the coach\'s first name from the calendar, or "Coach" when there isn\'t one.' }),
+        field('Subject', subjectInput),
+        field('Message', bodyInput),
+        example,
+        h('div', { class: 'row' },
+          h('button', {
+            class: 'btn primary', text: 'Save coach email', onclick: function () {
+              L.settings.coachSubject = subjectInput.value;
+              L.settings.coachBody = bodyInput.value;
+              saveLocal(); toast('Saved');
+            }
+          }),
+          h('button', {
+            class: 'btn', text: 'Reset to default', onclick: function () {
+              subjectInput.value = CFG.coachSubject; bodyInput.value = CFG.coachBody;
+              delete L.settings.coachSubject; delete L.settings.coachBody;
+              saveLocal(); showExample(); toast('Back to the default wording');
+            }
+          })))));
+    showExample();
   }
 
   // ---------------------------------------------------------------- start

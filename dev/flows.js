@@ -80,16 +80,16 @@ function jpegInfo(b) {
   assert.deepEqual(await page.$$eval('#print-root .pg', (els) => els.map((e) => e.className)), ['pg', 'pg land', 'pg']);
   console.log('✓ print');
 
-  // Email Sally: sheet with a mailto link (subject Handouts) that also downloads the files.
-  await page.click('.bar .btn:has-text("Email Sally")');
+  // Email: sheet with a mailto link (blank To, subject Handouts) that also downloads the files.
+  await page.click('.bar .btn.primary:has-text("Email")');
   await page.waitForSelector('.sheet a:has-text("Open email app")');
-  const sallyHref = await page.getAttribute('.sheet a:has-text("Open email app")', 'href');
-  console.log('sally mailto:', decodeURIComponent(sallyHref).replace(/\n/g, ' | '));
-  assert.ok(sallyHref.startsWith('mailto:office@sloanphotography.com?subject=Handouts&body='));
+  const mailHref = await page.getAttribute('.sheet a:has-text("Open email app")', 'href');
+  console.log('email mailto:', decodeURIComponent(mailHref).replace(/\n/g, ' | '));
+  assert.ok(mailHref.startsWith('mailto:?subject=Handouts&body='));
   await page.screenshot({ path: path.join(OUT, 'email-sally.png') });
   await page.evaluate(() => { document.querySelector('.sheet a[href^="mailto:"]').addEventListener('click', (e) => e.preventDefault()); });
   const [dl2] = await Promise.all([page.waitForEvent('download'), page.click('.sheet a:has-text("Open email app")')]);
-  console.log('✓ email Sally (download with it:', dl2.suggestedFilename() + ')');
+  console.log('✓ email (download with it:', dl2.suggestedFilename() + ')');
   await page.click('.sheet .btn:has-text("Done")');
 
   // Email coach from Cheek.
@@ -98,6 +98,16 @@ function jpegInfo(b) {
   await page.waitForSelector('.sheet a:has-text("Open email app")');
   const coachHref = await page.getAttribute('.sheet a:has-text("Open email app")', 'href');
   assert.ok(coachHref.startsWith('mailto:ctreiber@example.org?subject=Picture%20day'));
+  assert.match(decodeURIComponent(coachHref), /body=Hi Corey,/);
+  await page.click('.sheet .btn:has-text("Done")');
+  // A job with no coach on the calendar: blank To, "Hi Coach".
+  await page.locator('.job', { hasText: 'Ryan' }).locator('.link-btn').click();
+  await page.click('.sheet .btn:has-text("Email coach")');
+  await page.waitForSelector('.sheet a:has-text("Open email app")');
+  const ryanHref = decodeURIComponent(await page.getAttribute('.sheet a:has-text("Open email app")', 'href'));
+  console.log('no-coach mailto:', ryanHref.replace(/\n/g, ' | '));
+  assert.ok(ryanHref.startsWith('mailto:?subject=Picture day – Ryan Basketball ('));
+  assert.match(ryanHref, /Hi Coach,/);
   console.log('✓ email coach');
   await page.click('.sheet .btn:has-text("Done")');
 
@@ -152,8 +162,13 @@ function jpegInfo(b) {
   await page.waitForFunction(() => [...document.querySelectorAll('.card')].some((c) => c.textContent.includes('Ryan') && c.querySelector('img').src.startsWith('data:')));
   console.log('✓ school logo kept on this device');
 
-  // Settings
+  // Settings: custom coach email with placeholders.
   await page.click('.tab:has-text("Settings")');
+  await page.fill('.panel:has-text("Coach email") textarea', 'Hey [coach]! [sport] photos are [day] [short date] at [time].');
+  await page.click('.btn:has-text("Save coach email")');
+  const ex = await page.textContent('.panel:has-text("Coach email") .details');
+  console.log('example:', ex.replace(/\n+/g, ' | '));
+  assert.match(ex, /Hey Corey! Boys Basketball photos are Thursday \d+\/\d+ at 8:00 AM and 12:30 PM\./);
   await page.screenshot({ path: path.join(OUT, 'settings.png'), fullPage: true });
 
   // Phone
