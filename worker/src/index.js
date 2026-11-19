@@ -2,8 +2,10 @@
  * Calendar relay for Foxtrot Handouts.
  *
  * Browsers aren't allowed to read Google Calendar feeds directly, so the page
- * asks this Worker to fetch one for it: GET /?url=<Google iCal link>.
- * It only fetches Google Calendar iCal links, stores nothing and logs no links.
+ * asks this Worker to fetch one for it: POST / with the Google iCal link as
+ * the plain-text body. The link goes in the body, not the address, so it never
+ * shows up in Cloudflare's request logs. Only Google Calendar iCal links are
+ * fetched, and nothing is stored.
  */
 const ALLOWED_ORIGINS = [
   'https://handouts.foxtrotphoto.com',
@@ -22,15 +24,15 @@ export default {
       'Referrer-Policy': 'no-referrer'
     };
     if (request.method === 'OPTIONS') {
-      return new Response(null, { headers: { ...cors, 'Access-Control-Allow-Methods': 'GET', 'Access-Control-Max-Age': '86400' } });
+      return new Response(null, { headers: { ...cors, 'Access-Control-Allow-Methods': 'POST', 'Access-Control-Max-Age': '86400' } });
     }
-    if (request.method !== 'GET') return new Response('Use GET', { status: 405, headers: cors });
+    if (request.method !== 'POST') return new Response('Foxtrot Handouts calendar relay.', { headers: cors });
 
     let target;
     try {
-      target = new URL(new URL(request.url).searchParams.get('url') || '');
+      target = new URL((await request.text()).trim().slice(0, 500));
     } catch (e) {
-      return new Response('Add ?url= with a Google Calendar iCal link.', { status: 400, headers: cors });
+      return new Response('Send a Google Calendar iCal link.', { status: 400, headers: cors });
     }
     if (target.protocol !== 'https:' || target.hostname !== 'calendar.google.com' || !ICS_PATH.test(target.pathname)) {
       return new Response('Only Google Calendar iCal links can be fetched.', { status: 400, headers: cors });

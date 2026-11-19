@@ -417,10 +417,11 @@
     S.loading = true; S.error = '';
     S.today = HBICS.today(CFG.timeZone);
     render();
-    var url = CFG.relayUrl + (CFG.relayUrl.indexOf('?') < 0 ? '?' : '&') + 'url=' + encodeURIComponent(link);
     return Promise.all([
       loadShared(),
-      fetch(url, { cache: 'no-store', referrerPolicy: 'no-referrer' }).then(function (r) {
+      // The link goes in the body (plain text, so no extra permission check),
+      // never in the address, so it doesn't end up in request logs.
+      fetch(CFG.relayUrl, { method: 'POST', body: link, cache: 'no-store', referrerPolicy: 'no-referrer' }).then(function (r) {
         return r.text().then(function (t) {
           if (!r.ok) throw new Error(t || 'Could not read the calendar.');
           if (t.indexOf('BEGIN:VCALENDAR') < 0) throw new Error('That link didn\'t return a calendar. Check it in Settings.');
