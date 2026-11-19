@@ -101,6 +101,35 @@ function jpegInfo(b) {
   console.log('✓ email coach');
   await page.click('.sheet .btn:has-text("Done")');
 
+  // Download from the preview, with an unsaved edit: the file uses what's on screen.
+  await page.locator('.job', { hasText: 'Arbor Creek' }).locator('.link-btn').click();
+  await page.fill('.sheet .field:has-text("Date line") input', 'Tuesday November 24 (unsaved test)');
+  const [dl3] = await Promise.all([page.waitForEvent('download'), page.click('.sheet .btn:has-text("Download")')]);
+  const z3 = listZip(fs.readFileSync(await dl3.path()));
+  console.log('preview download:', dl3.suggestedFilename(), z3.map((e) => e.name).join(', '));
+  assert.equal(z3.length, 2);
+  await page.click('.sheet .btn:has-text("Cancel")');
+  assert.equal(await page.locator('.job:has-text("Arbor Creek") .edited').count(), 0);
+  console.log('✓ download from preview (edit not saved)');
+
+  // Not a school: remove Gunn, its job disappears; put it back.
+  await page.click('.tab:has-text("Schools")');
+  await page.click('.card:has-text("Gunn")');
+  await page.click('.sheet .btn:has-text("Not a school")');
+  await page.waitForSelector('.panel:has-text("Removed (not schools)") >> text=Gunn');
+  assert.equal(await page.locator('.card:has-text("Gunn")').count(), 0);
+  await page.click('.tab:has-text("Jobs")');
+  assert.equal(await page.locator('.job:has-text("Gunn")').count(), 0);
+  await page.reload();
+  await page.waitForSelector('.job');
+  assert.equal(await page.locator('.job:has-text("Gunn")').count(), 0);
+  await page.click('.tab:has-text("Schools")');
+  await page.screenshot({ path: path.join(OUT, 'schools-removed.png'), fullPage: true });
+  await page.click('.panel:has-text("Removed") button:has-text("Put back")');
+  await page.click('.tab:has-text("Jobs")');
+  await page.waitForSelector('.job:has-text("Gunn")');
+  console.log('✓ not-a-school removes the jobs and can be put back');
+
   // School: upload a logo, alias, saved on this device and kept after reload.
   await page.click('.tab:has-text("Schools")');
   await page.click('.card:has-text("Ryan")');

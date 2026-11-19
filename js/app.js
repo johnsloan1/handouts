@@ -172,7 +172,7 @@
 
   function knownSchools() {
     var keys = {};
-    (S.jobs || []).forEach(function (j) { keys[j.key] = j; });
+    (S.allJobs || []).forEach(function (j) { if (!keys[j.key]) keys[j.key] = j; });
     Object.keys(S.shared).forEach(function (k) { if (!keys[k]) keys[k] = { key: k, school: S.shared[k].name || k, typeLabel: '', fullName: '', address: '' }; });
     return Object.keys(keys).map(function (k) { return profileOf(keys[k]); })
       .sort(function (a, b) { return a.name.localeCompare(b.name); });
@@ -227,9 +227,9 @@
   function label(job) { return profileOf(job).name + (job.sportLabel ? ' ' + job.sportLabel : ''); }
   function safeName(s) { return String(s).replace(/[\\/:*?"<>|]+/g, '').replace(/\s+/g, ' ').trim(); }
 
-  function outputsFor(job) {
+  function outputsFor(job, r) {
     var base = safeName(job.date + ' ' + profileOf(job).name + ' ' + (job.sportLabel || ''));
-    if (resolve(job).mode === 'online') return [{ kind: 'online', name: base + ' - Online.jpg' }];
+    if ((r || resolve(job)).mode === 'online') return [{ kind: 'online', name: base + ' - Online.jpg' }];
     return [{ kind: 'full', name: base + ' - Paper Full.jpg' }, { kind: 'half', name: base + ' - Paper Half.jpg' }];
   }
 
@@ -246,14 +246,15 @@
   }
 
   /** Renders 300 dpi JPEGs, one at a time to keep phone memory low. */
-  function makeFiles(jobs, onEach) {
+  function makeFiles(jobs, onEach, drafts) {
     var files = [], list = [];
-    jobs.forEach(function (job) { outputsFor(job).forEach(function (o) { list.push({ job: job, out: o }); }); });
+    var look = function (job) { return drafts && drafts[job.id] || resolve(job); };
+    jobs.forEach(function (job) { outputsFor(job, look(job)).forEach(function (o) { list.push({ job: job, out: o }); }); });
     var chain = HBR.ensureFonts();
     list.forEach(function (item, i) {
       chain = chain.then(function () {
         if (onEach) onEach(i, list.length);
-        return drawData(resolve(item.job));
+        return drawData(look(item.job));
       }).then(function (d) {
         return new Promise(function (r) { setTimeout(r, 30); }).then(function () {
           var canvas = HBR.render(item.out.kind, d, 300);
@@ -433,7 +434,8 @@
     ]).then(function (res) {
       S.window = calendarWindow();
       var events = HBICS.parse(res[1], CFG.timeZone).filter(function (e) { return e.date >= S.window.from && e.date <= S.window.to; });
-      S.jobs = HB_buildJobs(events, aliasProfiles());
+      S.allJobs = HB_buildJobs(events, aliasProfiles());
+      S.jobs = S.allJobs.filter(function (j) { return !profileOf(j).hidden; });
       S.loading = false; S.updatedAt = new Date();
       var ids = {};
       S.jobs.forEach(function (j) { ids[j.id] = true; });
@@ -762,6 +764,19 @@
     build();
     var foot = h('div', { class: 'sheet-foot' },
       h('button', { class: 'link-btn left', text: 'Reset to calendar', onclick: reset }),
+      h('button', {
+        class: 'btn', title: 'Download this handout as it looks now', onclick: function () {
+          var drafts = {};
+          drafts[job.id] = draft;
+          makeFiles([job], progress('Making file'), drafts).then(function (files) {
+            busy('Saving…');
+            return saveFiles([job], files).then(function () {
+              busy();
+              toast(files.length === 1 ? 'Downloaded ' + files[0].name : 'Downloaded ' + files.length + ' files');
+            });
+          }).catch(fail);
+        }
+      }, icon('download'), 'Download'),
       job.coachEmail ? h('button', { class: 'btn', onclick: function () { doEmailCoach(job); } }, icon('mail'), 'Email coach') : null,
       h('button', { class: 'btn', text: 'Cancel', onclick: closeSheet }),
       h('button', { class: 'btn primary', text: 'Save', onclick: save }));
@@ -771,8 +786,18 @@
 
   // ---------------------------------------------------------------- schools
 
+  function setHidden(key, hidden) {
+    var mine = L.schools[key] = L.schools[key] || {};
+    mine.hidden = hidden;
+    saveLocal();
+    S.jobs = (S.allJobs || []).filter(function (j) { return !profileOf(j).hidden; });
+    Object.keys(S.selected).forEach(function (id) { if (id.split('|')[1] === key && hidden) delete S.selected[id]; });
+  }
+
   function renderSchools(main) {
-    var list = knownSchools();
+    var all = knownSchools();
+    var list = all.filter(function (p) { return !p.hidden; });
+    var removed = all.filter(function (p) { return p.hidden; });
     main.appendChild(h('p', { class: 'meta', text: 'Schools come from the calendar. Logos and colors are used on Online handouts. Changes you make here are saved on this device.' }));
     if (!list.length) { main.appendChild(h('div', { class: 'empty', text: 'No schools yet.' })); return; }
     main.appendChild(h('div', { class: 'cards' }, list.map(function (p) {
@@ -785,6 +810,16 @@
           h('div', { class: 's', text: [p.typeLabel, p.lastMode === 'online' ? 'Online' : 'Paper'].filter(Boolean).join(' · ') }),
           h('div', { class: 'swatches' }, h('i', { style: 'background:' + c.primary }), h('i', { style: 'background:' + c.secondary }), h('i', { style: 'background:' + c.accent }))));
     })));
+    if (removed.length) {
+      main.appendChild(h('div', { class: 'panel', style: 'margin-top:18px' },
+        h('h2', { text: 'Removed (not schools)' }),
+        h('div', { class: 'hint', style: 'margin-bottom:8px', text: 'Their calendar events don\'t show as jobs. Removed on this device.' }),
+        removed.map(function (p) {
+          return h('div', { class: 'row', style: 'justify-content:space-between;padding:6px 0;border-top:1px solid var(--line)' },
+            h('span', { text: p.name }),
+            h('button', { class: 'btn', text: 'Put back', onclick: function () { setHidden(p.key, false); render(); toast(p.name + ' is back'); } }));
+        })));
+    }
   }
 
   function openSchool(p) {
@@ -881,8 +916,14 @@
 
     build();
     openSheet(p.name, h('div', { class: 'sheet-body' }, prevBox, fields), h('div', { class: 'sheet-foot' },
+      h('button', {
+        class: 'btn danger left', text: 'Not a school — remove', onclick: function () {
+          if (!window.confirm('Remove ' + p.name + '? Its calendar events will no longer show as jobs. You can put it back from the bottom of the Schools tab.')) return;
+          setHidden(key, true); closeSheet(); render(); toast(p.name + ' removed');
+        }
+      }),
       L.schools[key] ? h('button', {
-        class: 'link-btn left', text: 'Undo my changes to this school', onclick: function () {
+        class: 'link-btn', text: 'Undo my changes to this school', onclick: function () {
           if (!window.confirm('Go back to the shared settings for ' + p.name + '?')) return;
           delete L.schools[key]; lsSet('hb.logo.' + key, null); saveLocal(); closeSheet(); render();
         }

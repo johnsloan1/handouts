@@ -39,6 +39,10 @@ in it is secret, and it never holds a Google login.
   }
   ```
   The key is the school name from the calendar title in lower case.
+  To hide something that isn't a school for everyone, add `"hidden": true` to
+  its entry. On one device, use **Not a school — remove** on the Schools tab.
+- **Preview / Edit** has a **Download** button that saves that job's handout as
+  it looks on screen, edits included, even before you save them.
 - **Edits** to one job, the Paper/Online choice, Sally's address and the
   half-sheet setting are saved on the device where they're made.
 - **Saved on a device** means in that browser. On iPhone, add the page to the
