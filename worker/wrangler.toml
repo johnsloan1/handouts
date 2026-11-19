@@ -1,0 +1,6 @@
+# Cloudflare Worker: calendar relay. Deployed by Cloudflare from the GitHub
+# repo (root directory "worker") whenever main changes.
+name = "handouts-relay"
+main = "src/index.js"
+compatibility_date = "2025-06-01"
+workers_dev = true

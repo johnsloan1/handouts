@@ -1,0 +1,10 @@
+{
+  "name": "foxtrot-handouts",
+  "private": true,
+  "description": "Picture-day handout builder for Foxtrot Photo",
+  "scripts": {
+    "test": "node --test test/*.test.js",
+    "dev": "node dev/server.js",
+    "flows": "node dev/flows.js"
+  }
+}
