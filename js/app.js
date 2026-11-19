@@ -427,7 +427,9 @@
           if (t.indexOf('BEGIN:VCALENDAR') < 0) throw new Error('That link didn\'t return a calendar. Check it in Settings.');
           return t;
         });
-      }, function () { throw new Error('Could not reach the calendar. Check your internet connection.'); })
+      }, function () {
+        throw new Error('Could not reach the calendar relay (' + CFG.relayUrl.replace(/^https:\/\//, '') + '). Check your internet connection, then try again.');
+      })
     ]).then(function (res) {
       S.window = calendarWindow();
       var events = HBICS.parse(res[1], CFG.timeZone).filter(function (e) { return e.date >= S.window.from && e.date <= S.window.to; });

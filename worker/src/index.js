@@ -6,20 +6,16 @@
  * the plain-text body. The link goes in the body, not the address, so it never
  * shows up in Cloudflare's request logs. Only Google Calendar iCal links are
  * fetched, and nothing is stored.
+ *
+ * Any web page may call it: it holds no secrets and only passes back the
+ * calendar whose secret link the caller already has.
  */
-const ALLOWED_ORIGINS = [
-  'https://handouts.foxtrotphoto.com',
-  'https://johnsloan1.github.io',
-  'http://localhost:8790'
-];
 const ICS_PATH = /^\/calendar\/ical\/[^/]+\/(private-[0-9a-f]+|public)\/basic\.ics$/;
 
 export default {
   async fetch(request) {
-    const origin = request.headers.get('Origin') || '';
     const cors = {
-      'Access-Control-Allow-Origin': ALLOWED_ORIGINS.includes(origin) ? origin : ALLOWED_ORIGINS[0],
-      'Vary': 'Origin',
+      'Access-Control-Allow-Origin': '*',
       'Cache-Control': 'no-store',
       'Referrer-Policy': 'no-referrer'
     };
@@ -37,9 +33,15 @@ export default {
     if (target.protocol !== 'https:' || target.hostname !== 'calendar.google.com' || !ICS_PATH.test(target.pathname)) {
       return new Response('Only Google Calendar iCal links can be fetched.', { status: 400, headers: cors });
     }
-    const res = await fetch(target.toString(), { headers: { 'User-Agent': 'Foxtrot-Handouts-Relay' }, cf: { cacheTtl: 0 } });
+    let res;
+    try {
+      res = await fetch(target.toString(), { headers: { 'User-Agent': 'Foxtrot-Handouts-Relay' } });
+    } catch (e) {
+      return new Response('Could not reach Google Calendar from the relay. Try again in a minute.', { status: 502, headers: cors });
+    }
     if (!res.ok) {
-      return new Response('Google Calendar answered ' + res.status + '. Check the calendar link.', { status: 502, headers: cors });
+      const why = res.status === 404 ? 'Google doesn\'t know that calendar link. Copy the secret address again.' : 'Google Calendar answered ' + res.status + '.';
+      return new Response(why, { status: 502, headers: cors });
     }
     return new Response(res.body, { headers: { ...cors, 'Content-Type': 'text/calendar; charset=utf-8' } });
   }
